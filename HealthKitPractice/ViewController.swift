@@ -77,8 +77,9 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         
     }()
     lazy var query: HKObserverQuery = {
-        
-       return HKObserverQuery(sampleType: weightQuantityType, predicate: predicate, updateHandler: weightChangedHandler)
+
+        let strongSelf = self
+        return HKObserverQuery(sampleType: strongSelf.weightQuantityType, predicate: strongSelf.predicate, updateHandler: strongSelf.weightChangedHandler)
         
     }()
     
@@ -171,7 +172,7 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         let birthDate = healthStore.dateOfBirthWithError(&dateOfBirthError) as NSDate?
         if let error = dateOfBirthError {
             
-            println("Could not read data from health kit")
+            println("Could not read data from health kit \(error)")
             
         } else {
             
@@ -243,6 +244,45 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         
     }
     
+    func fetchRecordedWeightLastDay() {
+        
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true)
+        let query = HKSampleQuery(sampleType: weightQuantityType, predicate: predicate, limit: Int(HKObjectQueryNoLimit), sortDescriptors: [sortDescriptor]) { (query, results, error) -> Void in
+            
+            if results.count > 0 {
+                
+                for sample in results as [HKQuantitySample] {
+                    
+                    let weightInKilograms = sample.quantity.doubleValueForUnit(HKUnit.gramUnitWithMetricPrefix(HKMetricPrefix.Kilo))
+                    let formatter = NSMassFormatter()
+                    let kilogramSuffix = formatter.unitStringFromValue(weightInKilograms, unit: NSMassFormatterUnit.Kilogram)
+                    NSOperationQueue.mainQueue().addOperationWithBlock({ () -> Void in
+                        
+                        println("Weight has been changed to \(weightInKilograms) \(kilogramSuffix) in \(sample.startDate)")
+                        
+                    })
+                    
+                }
+                
+            } else {
+                
+                println("Could not find any information!")
+                
+            }
+            
+        }
+        
+        healthStore.executeQuery(query)
+        
+    }
+    
+    func weightChangedHandler(query: HKObserverQuery!, completionHandler: HKObserverQueryCompletionHandler!, error: NSError!) {
+        
+        fetchRecordedWeightLastDay()
+        completionHandler()
+        
+    }
+    
     // MARK: ViewController life cycle
     
     override func viewDidAppear(animated: Bool) {
@@ -274,6 +314,9 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             
         }
         
+        readWeightInformation()
+        readHeightInformation()
+        readDateOfBirthInformation()
         startObserveringWeightChanges()
         
     }
@@ -289,9 +332,6 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         super.viewDidLoad()
         weightTextField.rightView = weightTextFieldRightLabel
         weightTextField.rightViewMode = UITextFieldViewMode.Always
-        readWeightInformation()
-        readHeightInformation()
-        readDateOfBirthInformation()
     }
 
     override func didReceiveMemoryWarning() {
